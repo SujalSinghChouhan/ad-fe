@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "../context/ToastContext";
+import { safeFetch } from "../utils/safeFetch";
 
 export default function Notifications() {
   const { user } = useAuth();
@@ -11,18 +12,18 @@ export default function Notifications() {
 
   useEffect(() => {
     if (!user || user.role !== "shopkeeper") return navigate("/login");
-    fetch(`/api/notifications/${user.id}`)
+    safeFetch(`/api/notifications/${user.id}`)
       .then((r) => r.json())
       .then(setNotifs);
   }, [user, navigate]);
 
   const acceptOrder = async (orderId, notifId) => {
-    await fetch(`/api/orders/${orderId}/status`, {
+    await safeFetch(`/api/orders/${orderId}/status`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "accepted" }),
     });
-    await fetch(`/api/notifications/${notifId}/read`, { method: "PUT" });
+    await safeFetch(`/api/notifications/${notifId}/read`, { method: "PUT" });
     setNotifs((prev) => prev.map((n) => n._id === notifId ? { ...n, read: true, accepted: true } : n));
     addToast("✅ Order accepted! Delivery boy will be assigned shortly.", "success");
   };

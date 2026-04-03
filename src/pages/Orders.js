@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { downloadInvoice } from "../utils/invoice";
 import { useToast } from "../context/ToastContext";
+import { safeFetch } from "../utils/safeFetch";
 
 const STATUS_COLORS = {
   placed:           { background: "#fff3e0", color: "#e65100" },
@@ -24,7 +25,7 @@ export default function Orders() {
   const prevStatusRef = useRef({});
 
   const fetchOrders = () => {
-    fetch(`/api/orders/customer/${user.id}`)
+    safeFetch(`/api/orders/customer/${user.id}`)
       .then((r) => r.json())
       .then((data) => {
         // Check for status changes and show toast
@@ -61,7 +62,7 @@ export default function Orders() {
       : "Are you sure you want to cancel this order?"
     )) return;
     setCancelling(orderId);
-    const res = await fetch(`/api/orders/${orderId}/cancel`, { method: "PUT" });
+    const res = await safeFetch(`/api/orders/${orderId}/cancel`, { method: "PUT" });
     const data = await res.json();
     setCancelling(null);
     if (res.ok) {

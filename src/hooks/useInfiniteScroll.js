@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
+const ALLOWED_ORIGIN = window.location.origin;
+function isSafeUrl(url) {
+  if (!url) return false;
+  if (url.startsWith("/")) return true;
+  try { return new URL(url).origin === ALLOWED_ORIGIN; } catch { return false; }
+}
+
 export default function useInfiniteScroll({ category = "", search = "", sort = "newest", limit = 12 }) {
   const [products, setProducts] = useState([]);
   const [page, setPage] = useState(1);
@@ -18,7 +25,9 @@ export default function useInfiniteScroll({ category = "", search = "", sort = "
       if (search) params.append("search", search);
       if (sort) params.append("sort", sort);
 
-      const res = await fetch(`/api/products?${params}`);
+      const safeUrl = `/api/products?${params}`;
+      if (!isSafeUrl(safeUrl)) return;
+      const res = await fetch(safeUrl);
       const data = await res.json();
 
       if (data.products) {

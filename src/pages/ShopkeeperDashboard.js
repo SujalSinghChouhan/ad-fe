@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { safeFetch } from "../utils/safeFetch";
 
 const emptyForm = { name: "", price: "", description: "", image: "", category: "", stock: "100" };
 
@@ -21,7 +22,7 @@ export default function ShopkeeperDashboard() {
   }, [user, navigate]);
 
   const fetchProducts = () => {
-    fetch(`/api/products/shopkeeper/${user.id}`)
+    safeFetch(`/api/products/shopkeeper/${user.id}`)
       .then((r) => r.json())
       .then(setProducts);
   };
@@ -42,7 +43,7 @@ export default function ShopkeeperDashboard() {
     formData.append("image", file);
 
     try {
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      const res = await safeFetch("/api/upload", { method: "POST", body: formData });
       const data = await res.json();
       if (res.ok) {
         setForm((prev) => ({ ...prev, image: data.imageUrl }));
@@ -61,7 +62,7 @@ export default function ShopkeeperDashboard() {
     e.preventDefault();
     const url = editId ? `/api/products/${editId}` : "/api/products";
     const method = editId ? "PUT" : "POST";
-    const res = await fetch(url, {
+    const res = await safeFetch(url, {
       method, headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, price: Number(form.price), stock: Number(form.stock), shopkeeperId: user.id, shopkeeperName: user.name }),
     });
@@ -81,9 +82,12 @@ export default function ShopkeeperDashboard() {
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this product?")) return;
-    await fetch(`/api/products/${id}`, { method: "DELETE" });
+    await safeFetch(`/api/products/${id}`, { method: "DELETE" });
     fetchProducts();
   };
+
+  const handleDeleteClick = (id) => () => handleDelete(id);
+  const handleEditClick = (p) => () => handleEdit(p);
 
   return (
     <div style={styles.page}>
@@ -175,8 +179,8 @@ export default function ShopkeeperDashboard() {
                   </span>
                 </div>
                 <div style={styles.pActions}>
-                  <button style={styles.editBtn} onClick={() => handleEdit(p)}>✏️ Edit</button>
-                  <button style={styles.delBtn} onClick={() => handleDelete(p._id || p.id)}>🗑️</button>
+                  <button style={styles.editBtn} onClick={handleEditClick(p)}>✏️ Edit</button>
+                  <button style={styles.delBtn} onClick={handleDeleteClick(p._id || p.id)}>🗑️</button>
                 </div>
               </div>
             ))

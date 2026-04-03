@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useToast } from "../context/ToastContext";
 import { Trash2, Minus, Plus, ChevronRight, MapPin, Tag, Bike } from "lucide-react";
+import { safeFetch } from "../utils/safeFetch";
 
 const DELIVERY_CHARGE = 40;
 const FREE_DELIVERY_ABOVE = 500;
@@ -33,7 +34,7 @@ export default function Cart() {
 
   useEffect(() => {
     if (user?.id) {
-      fetch(`/api/orders/penalty/${user.id}`).then(r => r.json()).then(d => setPenalty(d.penalty || 0));
+      safeFetch(`/api/orders/penalty/${user.id}`).then(r => r.json()).then(d => setPenalty(d.penalty || 0));
     }
   }, [user]);
 
@@ -42,8 +43,8 @@ export default function Cart() {
     const parts = address.split(",").map(p => p.trim());
     const city = parts[parts.length - 2] || parts[parts.length - 1];
     if (!city) return;
-    fetch(`/api/auth/nearest-shopkeeper/${city}`).then(r => r.json()).then(setNearestShopkeeper);
-    fetch(`/api/auth/nearby-delivery-boys/${city}`).then(r => r.json()).then(setNearbyDeliveryBoys);
+    safeFetch(`/api/auth/nearest-shopkeeper/${city}`).then(r => r.json()).then(setNearestShopkeeper);
+    safeFetch(`/api/auth/nearby-delivery-boys/${city}`).then(r => r.json()).then(setNearbyDeliveryBoys);
   }, [address]);
 
   const detectLocation = () => {
@@ -71,7 +72,7 @@ export default function Cart() {
   const handlePlaceOrder = async () => {
     if (paymentMethod === "upi" || paymentMethod === "card") {
       try {
-        const rpRes = await fetch("/api/payment/create-order", {
+        const rpRes = await safeFetch("/api/payment/create-order", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ amount: finalTotal }),
         });
@@ -83,7 +84,7 @@ export default function Cart() {
           prefill: { name: user.name, email: user.email, contact: phone },
           theme: { color: "#00C853" },
           handler: async (response) => {
-            const verifyRes = await fetch("/api/payment/verify", {
+            const verifyRes = await safeFetch("/api/payment/verify", {
               method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify(response),
             });
@@ -112,13 +113,13 @@ export default function Cart() {
     });
     const data = await res.json();
     if (res.ok) {
-      await fetch(`/api/auth/update-profile/${user.id}`, {
+      await safeFetch(`/api/auth/update-profile/${user.id}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address, phone }),
       });
       updateUser({ address, phone });
       clearCart();
-      if (penalty > 0) { await fetch(`/api/orders/penalty/${user.id}/clear`, { method: "PUT" }); }
+      if (penalty > 0) { await safeFetch(`/api/orders/penalty/${user.id}/clear`, { method: "PUT" }); }
       addToast("🎉 Order placed! Shopkeeper notified.", "success", 5000);
       setStep(4);
     } else setMsg(data.message);

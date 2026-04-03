@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { safeFetch } from "../utils/safeFetch";
 
 const STATUS_COLORS = {
   placed:           { background: "#fff3e0", color: "#e65100" },
@@ -30,10 +31,10 @@ export default function DeliveryDashboard() {
     fetch("/api/orders/available").then((r) => r.json()).then(setAvailable);
 
   const fetchMyOrders = () =>
-    fetch(`/api/orders/delivery/${user.id}`).then((r) => r.json()).then(setMyOrders);
+    safeFetch(`/api/orders/delivery/${user.id}`).then((r) => r.json()).then(setMyOrders);
 
   const pickOrder = async (orderId) => {
-    await fetch(`/api/orders/${orderId}/status`, {
+    await safeFetch(`/api/orders/${orderId}/status`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "out_for_delivery", deliveryBoyId: user.id, deliveryBoyName: user.name }),
     });
@@ -44,7 +45,7 @@ export default function DeliveryDashboard() {
   const initiateDelivery = async (order) => {
     setVerifyingOrder(order);
     setOtpError(""); setDeliveryOtp(""); setOtpSent(false);
-    const res = await fetch("/api/otp/send", {
+    const res = await safeFetch("/api/otp/send", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: order.phone, purpose: "delivery_verification" }),
     });
@@ -56,14 +57,14 @@ export default function DeliveryDashboard() {
   // Step 2: Verify OTP then mark delivered
   const verifyAndDeliver = async () => {
     setOtpError("");
-    const res = await fetch("/api/otp/verify", {
+    const res = await safeFetch("/api/otp/verify", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ phone: verifyingOrder.phone, otp: deliveryOtp }),
     });
     const data = await res.json();
     if (!res.ok) return setOtpError(data.message);
 
-    await fetch(`/api/orders/${verifyingOrder._id}/status`, {
+    await safeFetch(`/api/orders/${verifyingOrder._id}/status`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "delivered" }),
     });

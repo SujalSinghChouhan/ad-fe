@@ -6,7 +6,7 @@ export default function VoiceSearch({ onResult }) {
   const [supported] = useState(() => "webkitSpeechRecognition" in window || "SpeechRecognition" in window);
 
   const startListening = () => {
-    if (!supported) return alert("Voice search not supported in this browser");
+    if (!supported) return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SR();
     recognition.lang = "en-IN";
