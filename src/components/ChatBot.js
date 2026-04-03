@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 
-const SOCKET_URL = "http://localhost:5002";
+const SOCKET_URL = process.env.REACT_APP_API_URL || "http://localhost:5002";
 
 // Bot responses
 const BOT_RESPONSES = {
