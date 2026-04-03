@@ -3,7 +3,11 @@ import { io } from "socket.io-client";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 
-const SOCKET_URL = process.env.REACT_APP_API_URL || "https://ad-be-1.onrender.com";
+const SOCKET_URL = process.env.REACT_APP_API_URL
+  ? process.env.REACT_APP_API_URL
+  : process.env.NODE_ENV === "production"
+  ? "https://ad-be-1.onrender.com"
+  : "http://localhost:5002";
 
 // Bot responses
 const BOT_RESPONSES = {

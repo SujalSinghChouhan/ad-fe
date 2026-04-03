@@ -1,10 +1,14 @@
 const SAFE_PREFIXES = ["/api/", "/api"];
-const API_BASE = process.env.REACT_APP_API_URL || "https://ad-be-1.onrender.com";
+const API_BASE = process.env.REACT_APP_API_URL
+  ? process.env.REACT_APP_API_URL
+  : process.env.NODE_ENV === "production"
+  ? "https://ad-be-1.onrender.com"
+  : "";
 
 function isSafeUrl(url) {
   if (!url) return false;
   if (SAFE_PREFIXES.some((p) => url.startsWith(p))) return true;
-  if (url.startsWith(API_BASE)) return true;
+  if (API_BASE && url.startsWith(API_BASE)) return true;
   try {
     const parsed = new URL(url);
     return parsed.origin === window.location.origin;
