@@ -225,7 +225,7 @@ export default function ChatBot() {
 
   const emojis = ["😊", "😂", "❤️", "👍", "🙏", "😍", "🎉", "😢", "😡", "🤔", "👋", "✅", "❌", "🛒", "📦"];
 
-  const handleQuickReplyClick = (opt) => () => handleQuickReply(opt);
+  const handleRatingClick = (r) => () => submitRating(r);
 
   const bg = theme.dark ? "#1a1a2e" : "#fff";
   const cardBg = theme.dark ? "#16213e" : "#f9f9f9";
@@ -317,7 +317,7 @@ export default function ChatBot() {
                 <p style={{ margin: "0 0 10px", fontSize: "13px", color: textColor }}>⭐ Rate this conversation</p>
                 <div style={{ display: "flex", justifyContent: "center", gap: "8px" }}>
                   {[1,2,3,4,5].map(r => (
-                    <span key={r} onClick={() => submitRating(r)} style={{ fontSize: "28px", cursor: "pointer", opacity: r <= rating ? 1 : 0.4, transition: "opacity 0.2s" }}>⭐</span>
+                    <span key={r} onClick={handleRatingClick(r)} style={{ fontSize: "28px", cursor: "pointer", opacity: r <= rating ? 1 : 0.4, transition: "opacity 0.2s" }}>⭐</span>
                   ))}
                 </div>
               </div>

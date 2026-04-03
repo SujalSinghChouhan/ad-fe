@@ -51,7 +51,7 @@ export default function Cart() {
     setLocating(true);
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const { latitude, longitude } = pos.coords;
-      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+      const res = await safeFetch(`/api/geocode/reverse?lat=${latitude}&lon=${longitude}`);
       const data = await res.json();
       setAddress(data.display_name || `${latitude}, ${longitude}`);
       setLocating(false);
@@ -60,7 +60,7 @@ export default function Cart() {
 
   const applyCoupon = async () => {
     if (!couponCode.trim()) return setCouponMsg("Enter a coupon code");
-    const res = await fetch("/api/coupons/apply", {
+    const res = await safeFetch("/api/coupons/apply", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ code: couponCode, orderTotal: total }),
     });
@@ -102,7 +102,7 @@ export default function Cart() {
   };
 
   const placeOrder = async (paymentId = "") => {
-    const res = await fetch("/api/orders", {
+    const res = await safeFetch("/api/orders", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         customerId: user.id, customerName: user.name, customerEmail: user.email,

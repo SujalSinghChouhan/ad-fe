@@ -1,11 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-
-const ALLOWED_ORIGIN = window.location.origin;
-function isSafeUrl(url) {
-  if (!url) return false;
-  if (url.startsWith("/")) return true;
-  try { return new URL(url).origin === ALLOWED_ORIGIN; } catch { return false; }
-}
+import { safeFetch } from "../utils/safeFetch";
 
 export default function useInfiniteScroll({ category = "", search = "", sort = "newest", limit = 12 }) {
   const [products, setProducts] = useState([]);
@@ -25,9 +19,7 @@ export default function useInfiniteScroll({ category = "", search = "", sort = "
       if (search) params.append("search", search);
       if (sort) params.append("sort", sort);
 
-      const safeUrl = `/api/products?${params}`;
-      if (!isSafeUrl(safeUrl)) return;
-      const res = await fetch(safeUrl);
+      const res = await safeFetch(`/api/products?${params}`);
       const data = await res.json();
 
       if (data.products) {
@@ -40,30 +32,25 @@ export default function useInfiniteScroll({ category = "", search = "", sort = "
       setLoading(false);
       setInitialLoading(false);
     }
-  }, [category, search, sort, limit]);
+  }, [category, search, sort, limit]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset when filters change
   useEffect(() => {
     setProducts([]);
     setPage(1);
     setHasMore(true);
     setInitialLoading(true);
     fetchProducts(1, true);
-  }, [category, search, sort]);
+  }, [category, search, sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load more when page changes
   useEffect(() => {
     if (page > 1) fetchProducts(page);
-  }, [page]);
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Intersection Observer for infinite scroll
   useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect();
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading) {
-          setPage(prev => prev + 1);
-        }
+        if (entries[0].isIntersecting && hasMore && !loading) setPage(prev => prev + 1);
       },
       { threshold: 0.1 }
     );

@@ -1,11 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-
-const ALLOWED_ORIGIN = window.location.origin;
-function isSafeUrl(url) {
-  if (!url) return false;
-  if (url.startsWith("/")) return true;
-  try { return new URL(url).origin === ALLOWED_ORIGIN; } catch { return false; }
-}
+import { safeFetch } from "../utils/safeFetch";
 
 export default function useFetch(url) {
   const [data, setData] = useState(null);
@@ -17,8 +11,7 @@ export default function useFetch(url) {
     if (!url) return;
     setLoading(true); setError(null);
     try {
-      if (!isSafeUrl(url)) { setError({ code: 400, message: "Invalid request URL." }); setLoading(false); return; }
-      const res = await fetch(url);
+      const res = await safeFetch(url);
       if (!res.ok) {
         setError({ code: res.status, message: res.status === 404 ? "Resource not found" : "Server error occurred" });
         return;
@@ -30,7 +23,7 @@ export default function useFetch(url) {
         : { code: 500, message: "Something went wrong. Please try again." }
       );
     } finally { setLoading(false); }
-  }, [url, retryCount]);
+  }, [url, retryCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
