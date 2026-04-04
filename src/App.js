@@ -6,7 +6,9 @@ import { WishlistProvider } from "./context/WishlistContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { RecentlyViewedProvider } from "./context/RecentlyViewedContext";
 import { ToastProvider } from "./context/ToastContext";
+import { LocationProvider } from "./context/LocationContext";
 import { requestNotificationPermission } from "./utils/notifications";
+import LocationGate from "./components/LocationGate";
 import Wishlist from "./pages/Wishlist";
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
@@ -23,6 +25,7 @@ import DeliveryLogin from "./delivery/DeliveryLogin";
 import DeliveryDashboard from "./delivery/DeliveryDashboard";
 import DeliveryRegister from "./delivery/DeliveryRegister";
 import ProductDetail from "./pages/ProductDetail";
+import Products from "./pages/Products";
 import ChatBot from "./components/ChatBot";
 import ShopkeeperChat from "./pages/ShopkeeperChat";
 import ErrorPage from "./components/ErrorPage";
@@ -33,10 +36,12 @@ export default function App() {
     <AuthProvider>
       <ThemeProvider>
         <ToastProvider>
+          <LocationProvider>
           <CartProvider>
             <WishlistProvider>
               <RecentlyViewedProvider>
                 <BrowserRouter>
+                  <LocationGate />
                   <Navbar />
                   <ChatBot />
                   <div className="pb-20">
@@ -56,6 +61,7 @@ export default function App() {
                     <Route path="/delivery/dashboard" element={<DeliveryDashboard />} />
                     <Route path="/wishlist" element={<Wishlist />} />
                     <Route path="/product/:id" element={<ProductDetail />} />
+                    <Route path="/products" element={<Products />} />
                     <Route path="/shopkeeper/chat" element={<ShopkeeperChat />} />
                     <Route path="*" element={<ErrorPage code={404} />} />
                   </Routes>
@@ -64,6 +70,7 @@ export default function App() {
               </RecentlyViewedProvider>
             </WishlistProvider>
           </CartProvider>
+          </LocationProvider>
         </ToastProvider>
       </ThemeProvider>
     </AuthProvider>

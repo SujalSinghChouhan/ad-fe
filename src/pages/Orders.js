@@ -4,6 +4,10 @@ import { useNavigate } from "react-router-dom";
 import { downloadInvoice } from "../utils/invoice";
 import { useToast } from "../context/ToastContext";
 import { safeFetch } from "../utils/safeFetch";
+import { io } from "socket.io-client";
+import DeliveryMap from "../components/DeliveryMap";
+
+const SOCKET_URL = process.env.REACT_APP_API_URL || "http://localhost:5002";
 
 const STATUS_COLORS = {
   placed:           { background: "#fff3e0", color: "#e65100" },
@@ -23,36 +27,50 @@ export default function Orders() {
   const [tab, setTab] = useState("active");
   const [cancelling, setCancelling] = useState(null);
   const prevStatusRef = useRef({});
+  const socketRef = useRef(null);
+  const ordersRef = useRef([]);
 
   const fetchOrders = () => {
+    if (!user?.id) return;
     safeFetch(`/api/orders/customer/${user.id}`)
       .then((r) => r.json())
       .then((data) => {
-        // Check for status changes and show toast
-        data.forEach((order) => {
-          const prev = prevStatusRef.current[order._id];
-          const curr = order.status;
-          if (prev && prev !== curr) {
-            const msgs = {
-              accepted:         { msg: `✅ Your order #${order._id.slice(0,8).toUpperCase()} has been accepted by the shopkeeper!`, type: "success" },
-              out_for_delivery: { msg: `🛵 Your order #${order._id.slice(0,8).toUpperCase()} is out for delivery!`, type: "delivery" },
-              delivered:        { msg: `🎉 Your order #${order._id.slice(0,8).toUpperCase()} has been delivered!`, type: "success" },
-              cancelled:        { msg: `❌ Your order #${order._id.slice(0,8).toUpperCase()} has been cancelled.`, type: "error" },
-            };
-            if (msgs[curr]) addToast(msgs[curr].msg, msgs[curr].type, 6000);
-          }
-          prevStatusRef.current[order._id] = curr;
-        });
+        if (!Array.isArray(data)) return;
+        ordersRef.current = data;
         setOrders(data);
-      });
+      })
+      .catch(() => {});
+  };
+
+  const fetchOrdersThen = (cb) => {
+    if (!user?.id) return;
+    safeFetch(`/api/orders/customer/${user.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!Array.isArray(data)) return;
+        ordersRef.current = data;
+        setOrders(data);
+        cb && cb();
+      })
+      .catch(() => {});
   };
 
   useEffect(() => {
     if (!user) return navigate("/login");
     fetchOrders();
-    // Poll every 15 seconds for status updates
-    const interval = setInterval(fetchOrders, 15000);
-    return () => clearInterval(interval);
+
+    // Socket: join customer room for real-time order status updates
+    socketRef.current = io(SOCKET_URL);
+    socketRef.current.emit("join_customer", { customerId: user.id });
+    socketRef.current.on("order_status_update", (data) => {
+      const toastTypes = { accepted: "success", out_for_delivery: "delivery", delivered: "success", cancelled: "error" };
+      addToast(data.message, toastTypes[data.status] || "info", 8000);
+      fetchOrders();
+    });
+
+    // Keep polling as fallback every 30s
+    const interval = setInterval(fetchOrders, 30000);
+    return () => { clearInterval(interval); socketRef.current?.disconnect(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, navigate]);
 
@@ -91,12 +109,6 @@ export default function Orders() {
     return `https://www.google.com/maps/dir/${encodeURIComponent(shopAddress)}/${encodeURIComponent(userAddress)}`;
   };
 
-  // Build embed URL for route
-  const getRouteEmbedUrl = (shopAddress, userAddress) => {
-    if (!shopAddress || !userAddress) return null;
-    return `https://www.google.com/maps?saddr=${encodeURIComponent(shopAddress)}&daddr=${encodeURIComponent(userAddress)}&output=embed`;
-  };
-
   return (
     <div style={styles.page}>
       <h2 style={styles.title}>📦 My Orders</h2>
@@ -127,8 +139,6 @@ export default function Orders() {
           .map((order) => {
           const shopkeepers = getShopkeepers(order.items);
           const primaryShop = shopkeepers[0];
-          const routeEmbedUrl = getRouteEmbedUrl(primaryShop?.address, order.deliveryAddress);
-          const routeUrl = getRouteUrl(primaryShop?.address, order.deliveryAddress);
           const statusIndex = STATUS_STEPS.indexOf(order.status);
 
           return (
@@ -193,6 +203,19 @@ export default function Orders() {
                 </div>
               )}
 
+              {/* OTP Box: shown when out for delivery */}
+              {order.status === "out_for_delivery" && (
+                <div style={styles.otpBox}>
+                  <p style={{ margin: "0 0 6px", fontWeight: "bold", fontSize: "14px", color: "#232f3e" }}>🔐 Your Delivery OTP</p>
+                  <p style={{ margin: "0 0 10px", fontSize: "12px", color: "#555" }}>Show this OTP to the delivery boy to confirm delivery</p>
+                  {order.deliveryOtp ? (
+                    <div style={styles.otpCode}>{order.deliveryOtp}</div>
+                  ) : (
+                    <p style={{ fontSize: "13px", color: "#888" }}>OTP will appear here once delivery boy picks up your order</p>
+                  )}
+                </div>
+              )}
+
               {/* Products */}
               <div style={styles.itemsSection}>
                 {order.items.map((item, i) => (
@@ -232,36 +255,14 @@ export default function Orders() {
                 </div>
               )}
 
-              {/* Route Map: Shop → User */}
-              {routeEmbedUrl && (
-                <div style={styles.mapBox}>
-                  <div style={styles.mapHeader}>
-                    <p style={styles.mapLabel}>
-                      🗺️ Delivery Route: <strong>{primaryShop?.name}</strong> → Your Address
-                    </p>
-                  </div>
-                  <div style={styles.mapAddresses}>
-                    <div style={styles.mapFrom}>
-                      <span style={styles.mapDot}>🏪</span>
-                      <span>{primaryShop?.address || "Shop Location"}</span>
-                    </div>
-                    <div style={styles.mapArrow}>↓</div>
-                    <div style={styles.mapTo}>
-                      <span style={styles.mapDot}>📍</span>
-                      <span>{order.deliveryAddress}</span>
-                    </div>
-                  </div>
-                  <iframe
-                    title="route-map"
-                    src={routeEmbedUrl}
-                    style={styles.mapFrame}
-                    allowFullScreen
-                    loading="lazy"
-                  />
-                  <a href={routeUrl} target="_blank" rel="noreferrer" style={styles.mapLink}>
-                    🗺️ Open Full Route in Google Maps
-                  </a>
-                </div>
+              {/* Route Map: Shop → Customer using Leaflet */}
+              {primaryShop?.address && order.deliveryAddress && (
+                <DeliveryMap
+                  shopAddress={primaryShop.address}
+                  customerAddress={order.deliveryAddress}
+                  shopName={primaryShop.name}
+                  mode="customer"
+                />
               )}
 
               {/* Cancel Button */}
@@ -371,16 +372,8 @@ const styles = {
   productQty: { margin: 0, fontSize: "13px", color: "#888" },
   productPrice: { margin: "2px 0", fontSize: "13px", color: "#555" },
   productTotal: { margin: 0, fontWeight: "bold", fontSize: "15px", color: "#232f3e" },
-  mapBox: { borderRadius: "10px", overflow: "hidden", border: "1px solid #ddd", marginBottom: "12px" },
-  mapHeader: { background: "#f9f9f9", padding: "10px 14px", borderBottom: "1px solid #eee" },
-  mapLabel: { margin: 0, fontSize: "13px", fontWeight: "bold", color: "#555" },
-  mapAddresses: { background: "#fff", padding: "10px 14px", display: "flex", flexDirection: "column", gap: "4px", borderBottom: "1px solid #eee" },
-  mapFrom: { display: "flex", gap: "8px", fontSize: "12px", color: "#27ae60", alignItems: "flex-start" },
-  mapArrow: { fontSize: "16px", color: "#aaa", paddingLeft: "4px" },
-  mapTo: { display: "flex", gap: "8px", fontSize: "12px", color: "#e74c3c", alignItems: "flex-start" },
-  mapDot: { fontSize: "14px" },
-  mapFrame: { width: "100%", height: "220px", border: "none", display: "block" },
-  mapLink: { display: "block", padding: "10px 14px", background: "#e3f2fd", color: "#1565c0", fontSize: "13px", fontWeight: "bold", textDecoration: "none", textAlign: "center" },
+  mapBox: {},
+  mapHeader: {}, mapLabel: {}, mapAddresses: {}, mapFrom: {}, mapArrow: {}, mapTo: {}, mapDot: {}, mapFrame: {}, mapLink: {},
   orderFooter: { paddingTop: "12px", borderTop: "1px solid #f3f3f3" },
   billBox: { background: "#f9f9f9", borderRadius: "10px", padding: "14px 16px" },
   billRow: { display: "flex", justifyContent: "space-between", fontSize: "14px", padding: "5px 0", color: "#555", borderBottom: "1px solid #eee" },
@@ -407,4 +400,7 @@ const styles = {
   tab: { padding: "10px 20px", border: "1px solid #ff9900", borderRadius: "20px", cursor: "pointer", fontWeight: "bold", fontSize: "13px", display: "flex", alignItems: "center", gap: "8px" },
   tabCount: { background: "rgba(0,0,0,0.15)", borderRadius: "10px", padding: "1px 8px", fontSize: "12px" },
   empty: { textAlign: "center", padding: "60px", color: "#888" },
+  otpBox: { background: "#fff8e1", border: "2px solid #ff9900", borderRadius: "10px", padding: "14px 16px", marginBottom: "10px" },
+  otpCode: { fontSize: "28px", fontWeight: "bold", letterSpacing: "8px", color: "#232f3e", background: "#fff", border: "2px dashed #ff9900", borderRadius: "8px", padding: "8px 20px" },
+  otpSendBtn: { background: "#ff9900", color: "#fff", border: "none", padding: "10px 20px", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", fontSize: "14px" },
 };

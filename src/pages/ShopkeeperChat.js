@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { safeFetch } from "../utils/safeFetch";
 
 const SOCKET_URL = "http://localhost:5002";
 let socket;
@@ -42,7 +43,7 @@ export default function ShopkeeperChat() {
   }, [selected, chats]);
 
   const fetchChats = async () => {
-    const res = await fetch("/api/chat/all");
+    const res = await safeFetch("/api/chat/all");
     const data = await res.json();
     setChats(data);
   };
@@ -51,7 +52,7 @@ export default function ShopkeeperChat() {
     if (!input.trim() || !selected) return;
     const msg = { sender: "shopkeeper", senderName: user.name, text: input.trim(), time: new Date(), customerId: selected.customerId };
     socket.emit("send_message", { customerId: selected.customerId, message: msg });
-    await fetch(`/api/chat/message/${selected.customerId}`, {
+    await safeFetch(`/api/chat/message/${selected.customerId}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(msg),
     });

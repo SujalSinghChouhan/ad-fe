@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { validateEmail, validatePassword, validatePhone, validateName } from "../utils/validation";
+import { safeFetch } from "../utils/safeFetch";
 
 export default function Register() {
   const [step, setStep] = useState(1);
@@ -9,7 +10,7 @@ export default function Register() {
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
@@ -31,158 +32,200 @@ export default function Register() {
     e.preventDefault();
     setError("");
     if (!validate()) return;
-    setSending(true);
-    const res = await fetch("/api/otp/send", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: form.phone, purpose: "registration" }),
-    });
-    const data = await res.json();
-    setSending(false);
-    if (!res.ok) return setError(data.message);
-    if (data.devOtp) setSuccess(`Dev OTP: ${data.devOtp}`);
-    else setSuccess("OTP sent to your phone!");
-    setStep(2);
+    setLoading(true);
+    try {
+      const res = await safeFetch("/api/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: form.phone, purpose: "registration" }),
+      });
+      const data = await res.json();
+      if (!res.ok) return setError(data.message || "Failed to send OTP");
+      setSuccess(data.devOtp ? `Dev OTP: ${data.devOtp}` : "OTP sent to your phone!");
+      setStep(2);
+    } catch {
+      setError("Cannot connect to server. Make sure the backend is running.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleVerifyAndRegister = async (e) => {
     e.preventDefault();
     setError("");
     if (!otp || otp.length !== 6) return setError("Enter a valid 6-digit OTP");
-    const otpRes = await fetch("/api/otp/verify", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: form.phone, otp }),
-    });
-    const otpData = await otpRes.json();
-    if (!otpRes.ok) return setError(otpData.message);
-    const res = await fetch("/api/auth/register", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    const data = await res.json();
-    if (!res.ok) return setError(data.message);
-    setSuccess("✅ Registered successfully! Redirecting...");
-    setTimeout(() => {
-      if (form.role === "deliveryBoy") navigate("/delivery/login");
-      else navigate("/login");
-    }, 1500);
+    setLoading(true);
+    try {
+      // Verify OTP first
+      const otpRes = await safeFetch("/api/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: form.phone, otp }),
+      });
+      const otpData = await otpRes.json();
+      if (!otpRes.ok) return setError(otpData.message || "Invalid OTP");
+
+      // Then register
+      const res = await safeFetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) return setError(data.message || "Registration failed");
+
+      setSuccess("✅ Registered successfully! Redirecting to login...");
+      setTimeout(() => {
+        if (form.role === "deliveryBoy") navigate("/delivery/login");
+        else navigate("/login");
+      }, 1500);
+    } catch {
+      setError("Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const Field = ({ field, label, type = "text", placeholder }) => (
-    <div style={styles.fieldWrap}>
+    <div style={{ position: "relative", marginBottom: "4px" }}>
+      <label style={s.label}>{label}</label>
       <input
-        style={{ ...styles.input, borderColor: errors[field] ? "#e74c3c" : "#ddd" }}
-        placeholder={placeholder || label}
+        style={{ ...s.input, borderColor: errors[field] ? "#e74c3c" : "#e5e5e5" }}
+        placeholder={placeholder}
         type={field === "password" ? (showPassword ? "text" : "password") : type}
         value={form[field]}
         maxLength={field === "phone" ? 10 : undefined}
+        inputMode={field === "phone" ? "numeric" : undefined}
         onChange={(e) => {
           setForm({ ...form, [field]: e.target.value });
           if (errors[field]) setErrors({ ...errors, [field]: "" });
         }}
       />
       {field === "password" && (
-        <button type="button" style={styles.eyeBtn} onClick={() => setShowPassword(!showPassword)}>
+        <button type="button" style={s.eyeBtn} onClick={() => setShowPassword(!showPassword)}>
           {showPassword ? "🙈" : "👁️"}
         </button>
       )}
-      {errors[field] && <p style={styles.fieldError}>⚠️ {errors[field]}</p>}
+      {errors[field] && <p style={s.fieldError}>⚠️ {errors[field]}</p>}
     </div>
   );
 
+  const passwordStrength = () => {
+    const p = form.password;
+    const checks = [p.length >= 8, /[A-Z]/.test(p), /[0-9]/.test(p)];
+    const passed = checks.filter(Boolean).length;
+    return { passed, label: passed === 0 ? "" : passed === 1 ? "Weak" : passed === 2 ? "Medium" : "Strong", color: ["", "#e74c3c", "#ff9900", "#27ae60"][passed] };
+  };
+  const strength = passwordStrength();
+
   return (
-    <div style={styles.container}>
-      <div style={styles.box}>
-        <h2 style={styles.title}>📝 Create Account</h2>
-
-        <div style={styles.steps}>
-          <div style={{ ...styles.stepDot, background: step >= 1 ? "#ff9900" : "#ddd" }}>1</div>
-          <div style={styles.stepLine} />
-          <div style={{ ...styles.stepDot, background: step >= 2 ? "#ff9900" : "#ddd" }}>2</div>
-        </div>
-        <div style={styles.stepLabels}>
-          <span style={{ color: step === 1 ? "#ff9900" : "#888" }}>Details</span>
-          <span style={{ color: step === 2 ? "#ff9900" : "#888" }}>Verify OTP</span>
+    <div style={s.container}>
+      <div style={s.box}>
+        <div style={s.logoWrap}>
+          <span style={s.logo}>📝</span>
+          <h2 style={s.title}>Create Account</h2>
+          <p style={s.subtitle}>Join Apni Dukann today</p>
         </div>
 
-        {error && <p style={styles.error}>⚠️ {error}</p>}
-        {success && <p style={styles.success}>{success}</p>}
+        {/* Step indicator */}
+        <div style={s.steps}>
+          {["Details", "Verify OTP"].map((label, i) => (
+            <div key={i} style={s.stepItem}>
+              <div style={{ ...s.stepDot, background: step > i + 1 ? "#27ae60" : step === i + 1 ? "#ff9900" : "#ddd" }}>
+                {step > i + 1 ? "✓" : i + 1}
+              </div>
+              <span style={{ fontSize: "11px", fontWeight: "700", color: step === i + 1 ? "#ff9900" : "#aaa" }}>{label}</span>
+            </div>
+          ))}
+        </div>
+
+        {error && <div style={s.errorBox}>⚠️ {error}</div>}
+        {success && <div style={s.successBox}>{success}</div>}
 
         {step === 1 && (
           <form onSubmit={handleSendOTP} noValidate>
-            <Field field="name" label="Full Name" placeholder="👤 Full Name" />
-            <Field field="email" label="Email" type="email" placeholder="📧 Email Address" />
-            <Field field="password" label="Password" type="password" placeholder="🔒 Password (min 8 chars)" />
+            <Field field="name" label="Full Name" placeholder="Your full name" />
+            <Field field="email" label="Email Address" type="email" placeholder="you@example.com" />
+            <Field field="password" label="Password" type="password" placeholder="Min 8 chars, 1 uppercase, 1 number" />
 
-            {/* Password strength indicator */}
+            {/* Password strength */}
             {form.password && (
-              <div style={styles.strengthBar}>
-                {["length", "upper", "number"].map((check, i) => {
-                  const pass = check === "length" ? form.password.length >= 8 : check === "upper" ? /[A-Z]/.test(form.password) : /[0-9]/.test(form.password);
-                  return <div key={i} style={{ ...styles.strengthSegment, background: pass ? "#27ae60" : "#ddd" }} />;
-                })}
-                <span style={styles.strengthText}>
-                  {form.password.length < 8 ? "Too short" : !/[A-Z]/.test(form.password) ? "Add uppercase" : !/[0-9]/.test(form.password) ? "Add number" : "✅ Strong"}
-                </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", marginTop: "-2px" }}>
+                {[1, 2, 3].map((i) => (
+                  <div key={i} style={{ flex: 1, height: "4px", borderRadius: "2px", background: i <= strength.passed ? strength.color : "#e5e5e5", transition: "background 0.3s" }} />
+                ))}
+                <span style={{ fontSize: "12px", color: strength.color, fontWeight: "700", whiteSpace: "nowrap" }}>{strength.label}</span>
               </div>
             )}
 
-            <Field field="phone" label="Phone" type="tel" placeholder="📱 10-digit Mobile Number" />
-            <p style={styles.hint}>📱 OTP will be sent to this number</p>
+            <Field field="phone" label="Mobile Number" type="tel" placeholder="10-digit Indian number" />
+            <p style={{ color: "#aaa", fontSize: "12px", margin: "-8px 0 16px" }}>📱 OTP will be sent to this number</p>
 
-            <select style={styles.input} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+            <label style={s.label}>Register As</label>
+            <select style={{ ...s.input, cursor: "pointer" }} value={form.role}
+              onChange={(e) => setForm({ ...form, role: e.target.value })}>
               <option value="customer">🛍️ Customer</option>
               <option value="shopkeeper">🏪 Shopkeeper</option>
               <option value="deliveryBoy">🛵 Delivery Boy</option>
             </select>
 
-            <button style={styles.btn} type="submit" disabled={sending}>
-              {sending ? "Sending OTP..." : "Send OTP →"}
+            <button style={{ ...s.btn, opacity: loading ? 0.7 : 1 }} type="submit" disabled={loading}>
+              {loading ? "Sending OTP..." : "Send OTP →"}
             </button>
           </form>
         )}
 
         {step === 2 && (
           <form onSubmit={handleVerifyAndRegister}>
-            <p style={styles.otpInfo}>📱 Enter the 6-digit OTP sent to <strong>{form.phone}</strong></p>
+            <p style={s.otpInfo}>
+              📱 Enter the 6-digit OTP sent to <strong>{form.phone}</strong>
+            </p>
             <input
-              style={{ ...styles.input, textAlign: "center", fontSize: "24px", letterSpacing: "8px", fontWeight: "bold", borderColor: error ? "#e74c3c" : "#ff9900" }}
-              placeholder="------" value={otp}
+              style={s.otpInput}
+              placeholder="------"
+              value={otp}
               onChange={(e) => { setOtp(e.target.value.replace(/\D/g, "")); setError(""); }}
-              maxLength={6} inputMode="numeric"
+              maxLength={6}
+              inputMode="numeric"
             />
-            <button style={styles.btn} type="submit">Verify & Register ✓</button>
-            <button type="button" style={styles.resendBtn} onClick={() => { setStep(1); setError(""); setSuccess(""); }}>
+            <button style={{ ...s.btn, opacity: loading ? 0.7 : 1 }} type="submit" disabled={loading}>
+              {loading ? "Registering..." : "Verify & Register ✓"}
+            </button>
+            <button type="button" style={s.backBtn}
+              onClick={() => { setStep(1); setError(""); setSuccess(""); setOtp(""); }}>
               ← Change Details
             </button>
           </form>
         )}
 
-        <p style={styles.link}>Already have an account? <Link to="/login">Login</Link></p>
+        <p style={s.loginLink}>
+          Already have an account?{" "}
+          <Link to="/login" style={{ color: "#ff9900", fontWeight: "bold" }}>Login</Link>
+        </p>
       </div>
     </div>
   );
 }
 
-const styles = {
-  container: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface)", padding: "24px" },
-  box: { background: "var(--surface-lowest)", padding: "48px 40px", borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-hover)", width: "100%", maxWidth: "440px" },
-  title: { textAlign: "center", marginBottom: "28px", color: "var(--on-surface)", fontFamily: "var(--font-display)", fontSize: "28px", fontWeight: "800", letterSpacing: "-0.02em" },
-  steps: { display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "8px" },
-  stepDot: { width: "32px", height: "32px", borderRadius: "50%", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: "14px" },
-  stepLine: { width: "64px", height: "3px", background: "var(--surface-low)", margin: "0 10px", borderRadius: "2px" },
-  stepLabels: { display: "flex", justifyContent: "space-around", marginBottom: "24px", fontSize: "13px", fontWeight: "700", fontFamily: "var(--font-body)" },
-  fieldWrap: { position: "relative", marginBottom: "4px" },
-  input: { width: "100%", padding: "14px 18px", marginBottom: "4px", border: "none", borderRadius: "var(--radius-sm)", fontSize: "15px", boxSizing: "border-box", outline: "none", background: "var(--surface-low)", fontFamily: "var(--font-body)", color: "var(--on-surface)" },
-  eyeBtn: { position: "absolute", right: "14px", top: "14px", background: "none", border: "none", cursor: "pointer", fontSize: "18px" },
-  fieldError: { color: "#b02500", fontSize: "12px", margin: "0 0 12px", paddingLeft: "4px", fontFamily: "var(--font-body)" },
-  strengthBar: { display: "flex", alignItems: "center", gap: "6px", marginBottom: "14px" },
-  strengthSegment: { flex: 1, height: "4px", borderRadius: "2px" },
-  strengthText: { fontSize: "12px", color: "#747776", whiteSpace: "nowrap", fontFamily: "var(--font-body)" },
-  hint: { color: "#747776", fontSize: "13px", margin: "-2px 0 14px", fontFamily: "var(--font-body)" },
-  btn: { width: "100%", padding: "16px", background: "var(--primary)", border: "none", borderRadius: "var(--radius-full)", fontWeight: "bold", fontSize: "16px", cursor: "pointer", marginBottom: "12px", marginTop: "8px", color: "var(--on-primary)", fontFamily: "var(--font-display)", boxShadow: "0 8px 20px rgba(0, 106, 40, 0.2)", transition: "all 0.2s" },
-  resendBtn: { width: "100%", padding: "14px", background: "var(--surface-low)", border: "none", borderRadius: "var(--radius-full)", fontWeight: "bold", fontSize: "14px", cursor: "pointer", color: "var(--on-surface)", fontFamily: "var(--font-body)" },
-  otpInfo: { textAlign: "center", color: "#595c5b", fontSize: "14px", marginBottom: "20px", fontFamily: "var(--font-body)" },
-  error: { color: "#b02500", marginBottom: "16px", textAlign: "center", fontSize: "14px", background: "#fff0ed", padding: "10px", borderRadius: "var(--radius-sm)", fontFamily: "var(--font-body)" },
-  success: { color: "var(--primary)", marginBottom: "16px", textAlign: "center", fontSize: "14px", background: "#e8f5e9", padding: "10px", borderRadius: "var(--radius-sm)", fontFamily: "var(--font-body)" },
-  link: { textAlign: "center", marginTop: "20px", fontSize: "14px", color: "#595c5b", fontFamily: "var(--font-body)" },
+const s = {
+  container: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f5f5", padding: "24px" },
+  box: { background: "#fff", padding: "40px 36px", borderRadius: "20px", boxShadow: "0 4px 24px rgba(0,0,0,0.10)", width: "100%", maxWidth: "440px" },
+  logoWrap: { textAlign: "center", marginBottom: "24px" },
+  logo: { fontSize: "40px" },
+  title: { margin: "8px 0 4px", fontSize: "26px", fontWeight: "900", color: "#1a1a1a" },
+  subtitle: { margin: 0, fontSize: "14px", color: "#888" },
+  steps: { display: "flex", justifyContent: "center", gap: "40px", marginBottom: "24px" },
+  stepItem: { display: "flex", flexDirection: "column", alignItems: "center", gap: "6px" },
+  stepDot: { width: "32px", height: "32px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", fontSize: "14px", color: "#fff" },
+  label: { display: "block", fontSize: "13px", fontWeight: "700", color: "#444", marginBottom: "6px" },
+  input: { width: "100%", padding: "13px 16px", marginBottom: "16px", border: "1.5px solid #e5e5e5", borderRadius: "10px", fontSize: "15px", boxSizing: "border-box", outline: "none", background: "#fafafa", color: "#1a1a1a" },
+  eyeBtn: { position: "absolute", right: "14px", top: "34px", background: "none", border: "none", cursor: "pointer", fontSize: "18px" },
+  fieldError: { color: "#e74c3c", fontSize: "12px", margin: "-10px 0 12px", paddingLeft: "4px" },
+  btn: { width: "100%", padding: "15px", background: "#ff9900", border: "none", borderRadius: "12px", fontWeight: "900", fontSize: "16px", cursor: "pointer", marginBottom: "12px", color: "#fff", boxShadow: "0 4px 14px rgba(255,153,0,0.3)", transition: "all 0.2s" },
+  backBtn: { width: "100%", padding: "13px", background: "#f5f5f5", border: "none", borderRadius: "12px", fontWeight: "700", fontSize: "14px", cursor: "pointer", color: "#555" },
+  otpInput: { width: "100%", padding: "16px", marginBottom: "16px", border: "1.5px solid #ff9900", borderRadius: "12px", fontSize: "28px", textAlign: "center", letterSpacing: "12px", fontWeight: "900", boxSizing: "border-box", outline: "none", color: "#ff9900", background: "#fff8f0" },
+  otpInfo: { textAlign: "center", color: "#555", fontSize: "14px", marginBottom: "20px" },
+  errorBox: { background: "#fff0ed", color: "#c0392b", padding: "12px 16px", borderRadius: "10px", marginBottom: "16px", fontSize: "14px", fontWeight: "600" },
+  successBox: { background: "#e8f5e9", color: "#27ae60", padding: "12px 16px", borderRadius: "10px", marginBottom: "16px", fontSize: "14px", fontWeight: "600" },
+  loginLink: { textAlign: "center", marginTop: "20px", fontSize: "14px", color: "#888" },
 };

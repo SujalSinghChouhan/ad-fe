@@ -4,6 +4,28 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Colors */
+  --primary: #FF9900;
+  --on-primary: #FFFFFF;
+  --surface: #F8F9FA;
+  --surface-low: #F1F3F4;
+  --surface-lowest: #FFFFFF;
+  --on-surface: #202124;
+  
+  /* Shapes */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-full: 9999px;
+  
+  /* Shadows */
+  --shadow-hover: 0 4px 20px rgba(0, 0, 0, 0.08);
+  
+  /* Typography */
+  --font-display: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Plus Jakarta Sans', sans-serif;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {

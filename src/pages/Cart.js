@@ -3,8 +3,10 @@ import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useToast } from "../context/ToastContext";
-import { Trash2, Minus, Plus, ChevronRight, MapPin, Tag, Bike } from "lucide-react";
+import { Trash2, Minus, Plus, ChevronRight, MapPin, Tag, Bike, Map } from "lucide-react";
 import { safeFetch } from "../utils/safeFetch";
+import MapPicker from "../components/MapPicker";
+import { useLocation2 } from "../context/LocationContext";
 
 const DELIVERY_CHARGE = 40;
 const FREE_DELIVERY_ABOVE = 500;
@@ -12,10 +14,14 @@ const FREE_DELIVERY_ABOVE = 500;
 export default function Cart() {
   const { cart, removeFromCart, updateQty, clearCart, total } = useCart();
   const { user, updateUser } = useAuth();
+  const { location: userLocation } = useLocation2();
   const { addToast } = useToast();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-  const [address, setAddress] = useState(user?.address || "");
+  // Pre-fill address: saved profile address → location from LocationContext → empty
+  const [address, setAddress] = useState(
+    user?.address || (userLocation?.address && !userLocation?.skipped ? userLocation.address : "")
+  );
   const [phone, setPhone] = useState(user?.phone || "");
   const [paymentMethod, setPaymentMethod] = useState("cod");
   const [couponCode, setCouponCode] = useState("");
@@ -28,6 +34,7 @@ export default function Cart() {
   const [locating, setLocating] = useState(false);
   const [notes, setNotes] = useState("");
   const [msg, setMsg] = useState("");
+  const [showMapPicker, setShowMapPicker] = useState(false);
 
   const deliveryCharge = total >= FREE_DELIVERY_ABOVE ? 0 : DELIVERY_CHARGE;
   const finalTotal = total + deliveryCharge - discount + penalty;
@@ -262,11 +269,25 @@ export default function Cart() {
       {/* Step 2 - Delivery */}
       {step === 2 && (
         <div className="px-4 pt-4 space-y-3">
-          <button onClick={detectLocation} disabled={locating}
-            className="w-full bg-gray-900 text-white font-bold py-3 rounded-full flex items-center justify-center gap-2 active:scale-95 transition-all">
-            <MapPin size={16} className="text-primary" />
-            {locating ? "Detecting..." : "📍 Auto Detect My Location"}
-          </button>
+          <div className="flex gap-2">
+            <button onClick={detectLocation} disabled={locating}
+              className="flex-1 bg-gray-900 text-white font-bold py-3 rounded-full flex items-center justify-center gap-2 active:scale-95 transition-all text-sm">
+              <MapPin size={15} />
+              {locating ? "Detecting..." : "Auto Detect"}
+            </button>
+            <button onClick={() => setShowMapPicker(true)}
+              className="flex-1 bg-orange-500 text-white font-bold py-3 rounded-full flex items-center justify-center gap-2 active:scale-95 transition-all text-sm">
+              <Map size={15} /> Pick on Map
+            </button>
+          </div>
+
+          {showMapPicker && (
+            <MapPicker
+              initialAddress={address}
+              onSelect={(addr) => setAddress(addr)}
+              onClose={() => setShowMapPicker(false)}
+            />
+          )}
 
           {user?.address && (
             <div className="bg-green-50 border border-primary rounded-2xl px-4 py-3 flex items-center justify-between">

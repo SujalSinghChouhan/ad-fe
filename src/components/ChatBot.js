@@ -280,7 +280,7 @@ export default function ChatBot() {
                 {msg.type === "quickreply" ? (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "4px" }}>
                     {msg.options?.map((opt, j) => (
-                      <button key={j} onClick={handleQuickReplyClick(opt)}
+                      <button key={j} onClick={() => handleQuickReply(opt)}
                         style={{ background: "linear-gradient(135deg, #ff9900, #e67e00)", border: "none", color: "#fff", padding: "6px 12px", borderRadius: "16px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" }}>
                         {opt}
                       </button>

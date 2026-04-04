@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useTheme } from "../context/ThemeContext";
 import { useRecentlyViewed } from "../context/RecentlyViewedContext";
-import { ChevronRight, Star, Plus, ShoppingCart, Search, MapPin, ChevronLeft } from "lucide-react";
+import { useLocation2 } from "../context/LocationContext";
+import { ChevronRight, Star, Plus, ShoppingCart, Search, MapPin, ChevronLeft, ShoppingBag, Monitor, Shirt, Home as HomeIcon, Store, Apple, Milk, Cake, LayoutGrid, Navigation } from "lucide-react";
 import useInfiniteScroll from "../hooks/useInfiniteScroll";
 import shops from "../data/shops";
 
@@ -94,14 +95,14 @@ function ShopCard({ shop }) {
 }
 
 const CATEGORIES = [
-  { name: "Groceries", icon: "🛒", color: "bg-green-100" },
-  { name: "Electronics", icon: "🖥️", color: "bg-blue-100" },
-  { name: "Fashion", icon: "👗", color: "bg-pink-100" },
-  { name: "Daily Needs", icon: "🏠", color: "bg-yellow-100" },
-  { name: "Local Shops", icon: "🏪", color: "bg-purple-100" },
-  { name: "Fruits", icon: "🍎", color: "bg-red-100" },
-  { name: "Dairy", icon: "🥛", color: "bg-cyan-100" },
-  { name: "Bakery", icon: "🍞", color: "bg-orange-100" },
+  { name: "Groceries",   Icon: ShoppingBag, color: "bg-green-100",  iconColor: "text-green-600" },
+  { name: "Electronics", Icon: Monitor,     color: "bg-blue-100",   iconColor: "text-blue-600" },
+  { name: "Fashion",     Icon: Shirt,       color: "bg-pink-100",   iconColor: "text-pink-600" },
+  { name: "Daily Needs", Icon: HomeIcon,     color: "bg-yellow-100", iconColor: "text-yellow-600" },
+  { name: "Local Shops", Icon: Store,       color: "bg-purple-100", iconColor: "text-purple-600" },
+  { name: "Fruits",      Icon: Apple,       color: "bg-red-100",    iconColor: "text-red-600" },
+  { name: "Dairy",       Icon: Milk,        color: "bg-cyan-100",   iconColor: "text-cyan-600" },
+  { name: "Bakery",      Icon: Cake,        color: "bg-orange-100", iconColor: "text-orange-600" },
 ];
 
 const BANNERS = [
@@ -120,6 +121,7 @@ const BANNERS = [
     badge: "-50%",
     badgeColor: "bg-orange-500",
     accent: "#f97316",
+    category: "Electronics",
   },
   {
     bg: "from-[#0a2e1a] via-[#0d4a2a] to-[#166534]",
@@ -136,6 +138,7 @@ const BANNERS = [
     badge: "Fresh",
     badgeColor: "bg-green-500",
     accent: "#22c55e",
+    category: "Groceries",
   },
   {
     bg: "from-[#0c1445] via-[#1a237e] to-[#283593]",
@@ -152,6 +155,7 @@ const BANNERS = [
     badge: "-40%",
     badgeColor: "bg-blue-500",
     accent: "#3b82f6",
+    category: "Electronics",
   },
   {
     bg: "from-[#3b0764] via-[#6b21a8] to-[#7e22ce]",
@@ -168,6 +172,7 @@ const BANNERS = [
     badge: "2+1",
     badgeColor: "bg-pink-500",
     accent: "#ec4899",
+    category: "Fashion",
   },
   {
     bg: "from-[#1c1917] via-[#292524] to-[#44403c]",
@@ -184,6 +189,7 @@ const BANNERS = [
     badge: "Hot",
     badgeColor: "bg-violet-500",
     accent: "#8b5cf6",
+    category: "Electronics",
   },
   {
     bg: "from-[#451a03] via-[#92400e] to-[#b45309]",
@@ -200,6 +206,7 @@ const BANNERS = [
     badge: "New",
     badgeColor: "bg-amber-500",
     accent: "#f59e0b",
+    category: "Groceries",
   },
 ];
 
@@ -208,17 +215,40 @@ export default function Home() {
   const { addToCart } = useCart();
   const theme = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const { viewed } = useRecentlyViewed();
-  const [search, setSearch] = useState("");
+  const { location: userLocation, clearLocation } = useLocation2();
   const [category, setCategory] = useState("All");
   const [slide, setSlide] = useState(0);
   const [addedId, setAddedId] = useState(null);
   const [sortBy, setSortBy] = useState("newest");
+  const [nearbyShops, setNearbyShops] = useState([]);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+
+  // Read search & category from URL
+  const params = new URLSearchParams(location.search);
+  const search = params.get("search") || "";
+
+  useEffect(() => {
+    const urlCategory = params.get("category");
+    if (urlCategory) setCategory(urlCategory);
+  }, [location.search]);
 
   // Infinite scroll hook
   const { products, loading, initialLoading, hasMore, loaderRef } = useInfiniteScroll({
     category, search, sort: sortBy, limit: 12,
   });
+
+  // Fetch nearby shopkeepers when location is available
+  useEffect(() => {
+    if (!userLocation?.lat || !userLocation?.lon) return;
+    setNearbyLoading(true);
+    fetch(`/api/auth/nearby-shopkeepers?lat=${userLocation.lat}&lon=${userLocation.lon}&radius=20`)
+      .then(r => r.json())
+      .then(data => { setNearbyShops(Array.isArray(data) ? data : []); })
+      .catch(() => {})
+      .finally(() => setNearbyLoading(false));
+  }, [userLocation?.lat, userLocation?.lon]);
 
   // Trending - first 5 from API
   const [trending, setTrending] = useState([]);
@@ -259,17 +289,20 @@ export default function Home() {
   return (
     <div className={`min-h-screen ${theme.dark ? "bg-gray-900" : "bg-gray-50"} pb-20 md:pb-0`}>
 
-      {/* ── Search Bar (Mobile) ── */}
-      <div className="md:hidden px-4 py-3 bg-white shadow-sm">
-        <div className="flex items-center gap-2 bg-gray-100 rounded-full px-4 py-2.5">
-          <Search size={16} className="text-gray-400" />
-          <input className="flex-1 bg-transparent text-sm outline-none font-medium text-gray-800 placeholder-gray-400"
-            placeholder="Search products, shops..." value={search} onChange={e => setSearch(e.target.value)} />
-          {search && <button onClick={() => setSearch("")} className="text-gray-400 text-xs font-bold">✕</button>}
-        </div>
-      </div>
-
       <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
+
+        {/* ── Location Bar ── */}
+        {userLocation && !userLocation.skipped && (
+          <div className="flex items-center justify-between bg-orange-50 border border-orange-100 rounded-2xl px-4 py-2.5 mt-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <MapPin size={14} className="text-orange-500 flex-shrink-0" />
+              <span className="text-xs font-semibold text-gray-700 truncate">
+                {userLocation.address ? userLocation.address.split(",").slice(0, 3).join(",") : "Location set"}
+              </span>
+            </div>
+            <button onClick={clearLocation} className="text-[11px] text-orange-500 font-bold flex-shrink-0 ml-2 hover:text-orange-600">Change</button>
+          </div>
+        )}
 
         {/* ── Hero Banner ── */}
         {!search && (
@@ -316,10 +349,14 @@ export default function Home() {
 
                   {/* CTA Buttons */}
                   <div className="flex items-center gap-3">
-                    <button className={`${BANNERS[slide].ctaBg} text-white font-black px-6 py-3 rounded-full text-sm active:scale-95 transition-all shadow-lg flex items-center gap-2`}>
+                    <button
+                      onClick={() => { setCategory(BANNERS[slide].category); navigate(`/products?category=${BANNERS[slide].category}`); }}
+                      className={`${BANNERS[slide].ctaBg} text-white font-black px-6 py-3 rounded-full text-sm active:scale-95 transition-all shadow-lg flex items-center gap-2`}>
                       {BANNERS[slide].cta} <ChevronRight size={16} />
                     </button>
-                    <button className="bg-white/10 backdrop-blur-sm border border-white/20 text-white font-bold px-4 py-3 rounded-full text-sm hover:bg-white/20 transition-all">
+                    <button
+                      onClick={() => navigate("/products")}
+                      className="bg-white/10 backdrop-blur-sm border border-white/20 text-white font-bold px-4 py-3 rounded-full text-sm hover:bg-white/20 transition-all">
                       View All
                     </button>
                   </div>
@@ -392,29 +429,79 @@ export default function Home() {
           </div>
         )}
 
+        {/* ── Shops Near You ── */}
+        {!search && userLocation?.lat && (
+          <div className="py-4">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                  <Navigation size={18} className="text-orange-500" /> Shops Near You
+                </h2>
+                <p className="text-xs text-gray-400">Within 20km of your location</p>
+              </div>
+            </div>
+            {nearbyLoading ? (
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="min-w-[180px] bg-white rounded-2xl overflow-hidden shadow-sm flex-shrink-0">
+                    <div className="h-24 bg-gray-200 animate-pulse" />
+                    <div className="p-3 space-y-2">
+                      <div className="h-3 bg-gray-200 rounded-full animate-pulse w-3/4" />
+                      <div className="h-3 bg-gray-200 rounded-full animate-pulse w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : nearbyShops.length === 0 ? (
+              <div className="bg-white rounded-2xl p-6 text-center shadow-sm">
+                <p className="text-3xl mb-2">🏪</p>
+                <p className="text-sm font-bold text-gray-700">No shops found within 20km</p>
+                <p className="text-xs text-gray-400 mt-1">Try browsing all products instead</p>
+              </div>
+            ) : (
+              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                {nearbyShops.map(shop => (
+                  <div key={shop._id}
+                    onClick={() => navigate(`/products?search=${encodeURIComponent(shop.name)}`)}
+                    className="min-w-[180px] bg-white rounded-2xl shadow-sm overflow-hidden cursor-pointer hover:shadow-md transition-all flex-shrink-0 border border-gray-100">
+                    <div className="h-24 bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center">
+                      <span className="text-4xl">🏪</span>
+                    </div>
+                    <div className="p-3">
+                      <h3 className="text-sm font-black text-gray-900 line-clamp-1">{shop.name}</h3>
+                      <p className="text-xs text-gray-400 mt-0.5">{shop.location}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-[10px] bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full">
+                          ✓ Open
+                        </span>
+                        <span className="text-[10px] bg-orange-100 text-orange-600 font-bold px-2 py-0.5 rounded-full">
+                          📍 {shop.distanceKm} km
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Live Platform Stats ── */}
         {!search && (
-          <div style={{ display: "flex", gap: "16px", overflowX: "auto", padding: "24px 0 8px", scrollbarWidth: "none" }}>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-4">
             {[
-              { label: "Products Listed", value: stats.totalProducts, icon: "📦", color: "var(--primary)", bg: "var(--primary-container)" },
-              { label: "Active Shopkeepers", value: stats.totalShopkeepers, icon: "🏪", color: "var(--secondary)", bg: "var(--secondary-container)" },
-              { label: "Orders Delivered", value: stats.totalOrders, icon: "🚚", color: "#1565c0", bg: "#e3f2fd" },
-              { label: "Categories", value: stats.totalCategories, icon: "🗂️", color: "#6a1b9a", bg: "#f3e5f5" },
+              { label: "Products Listed",    value: "150+", Icon: ShoppingBag, bg: "bg-orange-50",  iconBg: "bg-orange-100", iconColor: "text-orange-500" },
+              { label: "Active Shopkeepers", value: "10+",  Icon: Store,       bg: "bg-purple-50",  iconBg: "bg-purple-100", iconColor: "text-purple-500" },
+              { label: "Delivery Partners",  value: "5+",   Icon: ShoppingCart,bg: "bg-blue-50",    iconBg: "bg-blue-100",   iconColor: "text-blue-500" },
+              { label: "Categories",         value: "10+",  Icon: LayoutGrid,  bg: "bg-green-50",   iconBg: "bg-green-100",  iconColor: "text-green-500" },
             ].map((s) => (
-              <div key={s.label} style={{
-                minWidth: "180px", flex: "1", background: "var(--surface-lowest)",
-                borderRadius: "var(--radius-md)", padding: "20px 24px",
-                boxShadow: "var(--shadow-ambient)", display: "flex", alignItems: "center",
-                gap: "16px", flexShrink: 0,
-              }}>
-                <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: s.bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", flexShrink: 0 }}>
-                  {s.icon}
+              <div key={s.label} className={`${s.bg} rounded-2xl p-4 flex items-center gap-3`}>
+                <div className={`${s.iconBg} w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0`}>
+                  <s.Icon size={22} className={s.iconColor} />
                 </div>
                 <div>
-                  <p style={{ fontSize: "28px", fontWeight: "900", color: s.color, fontFamily: "var(--font-display)", letterSpacing: "-0.02em", lineHeight: 1 }}>
-                    {s.value > 0 ? s.value.toLocaleString() : "—"}
-                  </p>
-                  <p style={{ fontSize: "13px", color: "#747776", fontFamily: "var(--font-body)", marginTop: "4px", fontWeight: "500" }}>{s.label}</p>
+                  <p className={`text-2xl font-black ${s.iconColor}`}>{s.value}</p>
+                  <p className="text-xs text-gray-500 font-medium">{s.label}</p>
                 </div>
               </div>
             ))}
@@ -429,16 +516,18 @@ export default function Home() {
               <button className="text-orange-500 text-sm font-bold flex items-center gap-1">See all <ChevronRight size={14} /></button>
             </div>
             <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-              {["All", ...CATEGORIES.map(c => c.name)].map((cat) => {
-                const cfg = CATEGORIES.find(c => c.name === cat);
+              {[{ name: "All", Icon: LayoutGrid, color: "bg-gray-100", iconColor: "text-gray-600" }, ...CATEGORIES].map((cfg) => {
+                const isActive = category === cfg.name;
                 return (
-                  <button key={cat} onClick={() => setCategory(cat)}
-                    className={`flex-shrink-0 flex flex-col items-center gap-2 transition-all duration-200 active:scale-95`}>
-                    <div className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl transition-all duration-200 ${category === cat ? "bg-orange-500 shadow-lg shadow-orange-200 scale-110" : cfg ? cfg.color : "bg-gray-100"}`}>
-                      {cfg ? cfg.icon : "🛍️"}
+                  <button key={cfg.name} onClick={() => { setCategory(cfg.name); navigate(cfg.name === "All" ? "/" : `/products?category=${cfg.name}`); }}
+                    className="flex-shrink-0 flex flex-col items-center gap-2 transition-all duration-200 active:scale-95">
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 ${
+                      isActive ? "bg-orange-500 shadow-lg shadow-orange-200 scale-110" : cfg.color
+                    }`}>
+                      <cfg.Icon size={26} className={isActive ? "text-white" : cfg.iconColor} strokeWidth={1.8} />
                     </div>
-                    <span className={`text-xs font-bold whitespace-nowrap ${category === cat ? "text-orange-500" : "text-gray-600"}`}>
-                      {cat === "All" ? "All" : cat.split(" ")[0]}
+                    <span className={`text-xs font-bold whitespace-nowrap ${isActive ? "text-orange-500" : "text-gray-600"}`}>
+                      {cfg.name === "All" ? "All" : cfg.name.split(" ")[0]}
                     </span>
                   </button>
                 );
@@ -507,7 +596,7 @@ export default function Home() {
           <div className="py-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-black text-gray-900">{category}</h2>
-              <button onClick={() => setCategory("All")} className="text-gray-400 text-sm font-bold">← All</button>
+              <button onClick={() => navigate("/products")} className="text-gray-400 text-sm font-bold">← All</button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               {filtered.map(p => (
@@ -546,9 +635,7 @@ export default function Home() {
                 <h2 className="text-lg font-black text-gray-900">🥬 Fresh Picks</h2>
                 <p className="text-xs text-gray-400">Delivered fresh from local farms</p>
               </div>
-              <button onClick={() => setCategory("Groceries")} className="text-orange-500 text-sm font-bold flex items-center gap-1">
-                See all <ChevronRight size={14} />
-              </button>
+              <button onClick={() => navigate("/products")} className="text-orange-500 text-sm font-bold flex items-center gap-1">See all <ChevronRight size={14} /></button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               {freshPicks.map(p => (

@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { safeFetch } from "../utils/safeFetch";
+import { io } from "socket.io-client";
+import DeliveryMap from "../components/DeliveryMap";
+
+const SOCKET_URL = process.env.REACT_APP_API_URL || "http://localhost:5002";
 
 const STATUS_COLORS = {
   placed:           { background: "#fff3e0", color: "#e65100" },
@@ -20,59 +24,66 @@ export default function DeliveryDashboard() {
   const [deliveryOtp, setDeliveryOtp] = useState("");
   const [otpError, setOtpError] = useState("");
   const [otpSent, setOtpSent] = useState(false);
+  const [newAssignment, setNewAssignment] = useState(null);
+  const socketRef = useRef(null);
 
   useEffect(() => {
     if (!user || user.role !== "deliveryBoy") return navigate("/delivery/login");
-    fetchAvailable();
-    fetchMyOrders();
+    fetchAllOrders();
+
+    // Socket: join delivery room and listen for new assignments
+    socketRef.current = io(SOCKET_URL);
+    socketRef.current.emit("join_delivery", { deliveryBoyId: user.id });
+    socketRef.current.on("new_delivery_assignment", (data) => {
+      setNewAssignment(data);
+      fetchAllOrders();
+    });
+    return () => socketRef.current?.disconnect();
   }, [user, navigate]);
 
-  const fetchAvailable = () =>
-    fetch("/api/orders/available").then((r) => r.json()).then(setAvailable);
-
-  const fetchMyOrders = () =>
-    safeFetch(`/api/orders/delivery/${user.id}`).then((r) => r.json()).then(setMyOrders);
+  const fetchAllOrders = () =>
+    safeFetch(`/api/orders/delivery/${user.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!Array.isArray(data)) return;
+        setAvailable(data.filter((o) => o.status === "accepted"));
+        setMyOrders(data);
+      })
+      .catch(() => {});
 
   const pickOrder = async (orderId) => {
     await safeFetch(`/api/orders/${orderId}/status`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "out_for_delivery", deliveryBoyId: user.id, deliveryBoyName: user.name }),
-    });
-    fetchAvailable(); fetchMyOrders();
+    }).catch(() => {});
+    fetchAllOrders();
   };
 
-  // Step 1: Send OTP to customer before delivery
-  const initiateDelivery = async (order) => {
+  // Step 1: Open OTP modal (OTP already sent by backend when order was picked up)
+  const initiateDelivery = (order) => {
     setVerifyingOrder(order);
-    setOtpError(""); setDeliveryOtp(""); setOtpSent(false);
-    const res = await safeFetch("/api/otp/send", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: order.phone, purpose: "delivery_verification" }),
-    });
-    const data = await res.json();
-    setOtpSent(true);
-    if (data.devOtp) setOtpError(`Dev OTP: ${data.devOtp}`);
+    setOtpError("");
+    setDeliveryOtp("");
+    setOtpSent(true); // OTP already sent by backend
   };
 
-  // Step 2: Verify OTP then mark delivered
+  // Step 2: Verify OTP via order-specific endpoint then mark delivered
   const verifyAndDeliver = async () => {
     setOtpError("");
-    const res = await safeFetch("/api/otp/verify", {
+    const res = await safeFetch(`/api/orders/${verifyingOrder._id}/verify-otp`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone: verifyingOrder.phone, otp: deliveryOtp }),
+      body: JSON.stringify({ otp: deliveryOtp }),
     });
     const data = await res.json();
-    if (!res.ok) return setOtpError(data.message);
+    if (!res.ok) return setOtpError(data.message || "Invalid OTP");
 
-    await safeFetch(`/api/orders/${verifyingOrder._id}/status`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "delivered" }),
-    });
-    setVerifyingOrder(null); setDeliveryOtp("");
-    fetchMyOrders();
+    setVerifyingOrder(null);
+    setDeliveryOtp("");
+    setOtpError("");
+    fetchAllOrders();
   };
 
-  const active = myOrders.filter((o) => o.status !== "delivered");
+  const active = myOrders.filter((o) => o.status === "out_for_delivery");
   const completed = myOrders.filter((o) => o.status === "delivered");
 
   return (
@@ -96,8 +107,8 @@ export default function DeliveryDashboard() {
       {verifyingOrder && (
         <div style={styles.modal}>
           <div style={styles.modalBox}>
-            <h3 style={styles.modalTitle}>🔐 Verify Delivery</h3>
-            <p style={styles.modalSub}>Ask customer for OTP sent to <strong>{verifyingOrder.phone}</strong></p>
+            <h3 style={styles.modalTitle}>🔐 Verify Delivery OTP</h3>
+            <p style={styles.modalSub}>Ask the customer for the OTP sent to their phone <strong>{verifyingOrder.phone}</strong></p>
             {!otpSent ? (
               <p style={{ color: "#888", fontSize: "13px" }}>Sending OTP...</p>
             ) : (
@@ -116,6 +127,22 @@ export default function DeliveryDashboard() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* New Assignment Alert */}
+      {newAssignment && (
+        <div style={styles.assignmentAlert}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <p style={{ margin: "0 0 4px", fontWeight: "bold", fontSize: "15px", color: "#232f3e" }}>📦 New Order Assigned to You!</p>
+              <p style={{ margin: 0, fontSize: "13px", color: "#555" }}>{newAssignment.message}</p>
+            </div>
+            <button onClick={() => { setNewAssignment(null); setTab("available"); }}
+              style={{ background: "#ff9900", color: "#fff", border: "none", padding: "8px 16px", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", whiteSpace: "nowrap", marginLeft: "12px" }}>
+              View Order
+            </button>
           </div>
         </div>
       )}
@@ -169,6 +196,14 @@ export default function DeliveryDashboard() {
                 <p>📍 {order.deliveryAddress}</p>
                 <p>💰 ₹{order.total}</p>
               </div>
+              {order.shopkeeperAddress && (
+                <DeliveryMap
+                  shopAddress={order.shopkeeperAddress}
+                  customerAddress={order.deliveryAddress}
+                  shopName={order.shopkeeperName}
+                  mode="delivery"
+                />
+              )}
               <button style={styles.deliverBtn} onClick={() => initiateDelivery(order)}>
                 🔐 Verify OTP & Mark Delivered
               </button>
@@ -220,6 +255,7 @@ const styles = {
   itemTag: { background: "#fff3e0", color: "#e65100", padding: "4px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "bold" },
   pickBtn: { background: "#ff9900", color: "#fff", border: "none", padding: "10px 24px", borderRadius: "6px", cursor: "pointer", fontWeight: "bold", fontSize: "14px" },
   deliverBtn: { background: "#27ae60", color: "#fff", border: "none", padding: "10px 24px", borderRadius: "6px", cursor: "pointer", fontWeight: "bold", fontSize: "14px" },
+  assignmentAlert: { background: "#fff3e0", border: "2px solid #ff9900", borderRadius: "12px", padding: "16px", marginBottom: "20px", boxShadow: "0 2px 8px rgba(255,153,0,0.2)" },
   empty: { textAlign: "center", padding: "40px", color: "#888" },
   modal: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 },
   modalBox: { background: "#fff", padding: "32px", borderRadius: "16px", width: "340px", textAlign: "center", boxShadow: "0 8px 32px rgba(0,0,0,0.2)" },

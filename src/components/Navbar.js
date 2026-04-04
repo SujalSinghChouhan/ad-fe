@@ -4,7 +4,7 @@ import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
 import { useTheme } from "../context/ThemeContext";
 import { useState } from "react";
-import { Search, ShoppingCart, Bell, User, MapPin, Heart, Home, Grid, Bike, Store, Moon, Sun, Menu, X, ChevronDown } from "lucide-react";
+import { Search, ShoppingCart, Bell, User, Heart, Home, Grid, Bike, Store, Moon, Sun, Menu, X } from "lucide-react";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -19,9 +19,12 @@ export default function Navbar() {
 
   const handleSearch = (e) => {
     if (e.key === "Enter" && search.trim()) {
-      navigate(`/?search=${search}`);
-      setSearch("");
+      navigate(`/products?search=${encodeURIComponent(search.trim())}`);
     }
+  };
+
+  const handleSearchClick = () => {
+    if (search.trim()) navigate(`/products?search=${encodeURIComponent(search.trim())}`);
   };
 
   return (
@@ -39,17 +42,6 @@ export default function Navbar() {
             </div>
           </Link>
 
-          {/* Location */}
-          <button className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors flex-shrink-0">
-            <MapPin size={14} className="text-orange-400" />
-            <div className="text-left">
-              <p className="text-[10px] text-white/50">Deliver to</p>
-              <p className="text-xs font-bold flex items-center gap-1">
-                {user?.location || "Mumbai"} <ChevronDown size={10} />
-              </p>
-            </div>
-          </button>
-
           {/* Search */}
           <div className="flex-1 flex items-center bg-white rounded-full overflow-hidden shadow-sm">
             <input
@@ -59,7 +51,7 @@ export default function Navbar() {
               onChange={e => setSearch(e.target.value)}
               onKeyDown={handleSearch}
             />
-            <button onClick={() => { if (search.trim()) navigate(`/?search=${search}`); }}
+            <button onClick={handleSearchClick}
               className="bg-orange-500 hover:bg-orange-600 px-5 py-2.5 flex items-center gap-2 transition-colors">
               <Search size={16} className="text-white" />
               <span className="text-white text-sm font-bold">Search</span>
@@ -131,7 +123,7 @@ export default function Navbar() {
         <div className="border-t border-white/10">
           <div className="max-w-7xl mx-auto px-6 py-2 flex items-center gap-6 overflow-x-auto scrollbar-hide">
             {["All", "Groceries", "Electronics", "Fashion", "Daily Needs", "Local Shops", "Fruits", "Dairy"].map(cat => (
-              <button key={cat} onClick={() => navigate(cat === "All" ? "/" : `/?category=${cat}`)}
+              <button key={cat} onClick={() => navigate(cat === "All" ? "/" : `/products?category=${cat}`)}
                 className="text-white/70 hover:text-white text-xs font-semibold whitespace-nowrap transition-colors hover:text-orange-400 flex-shrink-0">
                 {cat}
               </button>
@@ -143,16 +135,10 @@ export default function Navbar() {
       {/* ── Mobile Top Bar ── */}
       <div className="md:hidden sticky top-0 z-50 bg-gradient-to-r from-gray-900 to-gray-800 px-4 py-3">
         <div className="flex items-center justify-between">
-          {/* Logo + Location */}
+          {/* Logo */}
           <div className="flex items-center gap-2">
             <span className="text-xl">🛒</span>
-            <div>
-              <p className="text-white font-black text-sm leading-none">Apni Dukaan</p>
-              <div className="flex items-center gap-1">
-                <MapPin size={10} className="text-orange-400" />
-                <p className="text-white/60 text-[10px]">{user?.location || "Mumbai"}</p>
-              </div>
-            </div>
+            <p className="text-white font-black text-sm leading-none">Apni Dukaan</p>
           </div>
 
           {/* Right Icons */}
